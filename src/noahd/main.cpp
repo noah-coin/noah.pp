@@ -208,11 +208,11 @@ int main(int argc, char** argv)
         if (false == rpc_bind_to_address.local.empty())
             cout << "rpc interface: " << rpc_bind_to_address.to_string() << endl;
 
-        beltpp::ilog_ptr plogger_p2p = beltpp::console_logger("exe_publiqd_p2p", false);
+        beltpp::ilog_ptr plogger_p2p = beltpp::console_logger("noahd_p2p", false);
         plogger_p2p->disable();
-        beltpp::ilog_ptr plogger_rpc = beltpp::console_logger("exe_publiqd_rpc", true);
+        beltpp::ilog_ptr plogger_rpc = beltpp::console_logger("noahd_rpc", true);
         //plogger_rpc->disable();
-        plogger_exceptions = meshpp::file_logger("publiqd_exceptions",
+        plogger_exceptions = meshpp::file_logger("noahd_exceptions",
                                                  fs_log / "exceptions.txt");
         plogger_storage_exceptions = meshpp::file_logger("storage_exceptions",
                                                          fs_log / "storage_exceptions.txt");
