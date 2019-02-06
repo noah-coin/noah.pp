@@ -1,0 +1,3 @@
+[submodule "src/cmake_utility"]
+	path = src/cmake_utility
+	url = https://github.com/publiqnet/cmake_utility
