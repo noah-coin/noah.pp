@@ -45,6 +45,8 @@ bool process_command_line(int argc, char** argv,
                           meshpp::private_key& pv_key,
                           bool& log_enabled);
 
+string genesis_signed_block();
+
 static bool g_termination_handled = false;
 static publiqpp::node* g_pnode = nullptr;
 void termination_handler(int /*signum*/)
@@ -219,7 +221,8 @@ int main(int argc, char** argv)
 
         //__debugbreak();
         
-        publiqpp::node node(rpc_bind_to_address,
+        publiqpp::node node(genesis_signed_block(),
+                            rpc_bind_to_address,
                             p2p_bind_to_address,
                             p2p_connect_to_addresses,
                             fs_blockchain,
@@ -381,4 +384,10 @@ bool process_command_line(int argc, char** argv,
     }
 
     return true;
+}
+
+
+string genesis_signed_block()
+{
+    return R"genesis({"rtt":6,"block_details":{"rtt":5,"header":{"rtt":4,"block_number":0,"delta":0,"c_sum":0,"c_const":1,"prev_hash":"GN41ATrkGn58hDMiW6eMkert3E23JnUvJ2mXcxWWiPyL","time_signed":"2019-02-07 14:34:23"},"rewards":[{"rtt":10,"amount":{"rtt":0,"whole":100,"fraction":0},"to":"NOAH7Ta31VaxCB9VfDRvYYosKYpzxXNgVH46UkM9i4FhzNg4JEU3YJ","reward_type":"initial"},{"rtt":10,"amount":{"rtt":0,"whole":100,"fraction":0},"to":"NOAH76Zv5QceNSLibecnMGEKbKo3dVFV6HRuDSuX59mJewJxHPhLwu","reward_type":"initial"},{"rtt":10,"amount":{"rtt":0,"whole":100,"fraction":0},"to":"NOAH7JEFjtQNjyzwnThepF2jJtCe7cCpUFEaxGdUnN2W9wPP5Nh92G","reward_type":"initial"},{"rtt":10,"amount":{"rtt":0,"whole":100,"fraction":0},"to":"NOAH8f5Z8SKVrYFES1KLHtCYMx276a5NTgZX6baahzTqkzfnB4Pidk","reward_type":"initial"},{"rtt":10,"amount":{"rtt":0,"whole":100,"fraction":0},"to":"NOAH8MiwBdYzSj38etLYLES4FSuKJnLPkXAJv4MyrLW7YJNiPbh4z6","reward_type":"initial"}],"signed_transactions":[]},"authority":"NOAH5HnbMEwb8AYsqZrrEwPaKZ1kzADmwuUMhhtdhL5ZdCCW5pkWmq","signature":"381yXZCQPYz4H5k2yuGHR6sBCsqnRE86M1ionjg5Y6MdwiyxVHWHxuowfcvcf8K6aSkbGUxt9h8Bc5xq3gBNokD6Ff4K8Eau"})genesis";
 }
