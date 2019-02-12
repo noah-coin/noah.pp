@@ -7,11 +7,7 @@ add_custom_command (
 
 # define the executable
 add_executable(noahd
-    main.cpp
-    pid.hpp
-    pid.gen.hpp
-    settings.cpp
-    settings.hpp)
+    main.cpp)
 
 # libraries this module links to
 target_link_libraries(noahd PRIVATE
