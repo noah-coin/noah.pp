@@ -147,7 +147,7 @@ int main(int argc, char** argv)
     beltpp::ip_address rpc_bind_to_address;
     vector<beltpp::ip_address> p2p_connect_to_addresses;
     string data_directory;
-    NodeType n_type = NodeType::miner;
+    NodeType n_type = NodeType::blockchain;
     bool log_enabled = false;
     meshpp::random_seed seed;
     meshpp::private_key pv_key = seed.get_private_key(0);
@@ -197,7 +197,6 @@ int main(int argc, char** argv)
 
         auto fs_blockchain = meshpp::data_directory_path("blockchain");
         auto fs_action_log = meshpp::data_directory_path("action_log");
-        auto fs_storage = meshpp::data_directory_path("storage");
         auto fs_transaction_pool = meshpp::data_directory_path("transaction_pool");
         auto fs_state = meshpp::data_directory_path("state");
         auto fs_log = meshpp::data_directory_path("log");
@@ -217,9 +216,9 @@ int main(int argc, char** argv)
         plogger_storage_exceptions = meshpp::file_logger("storage_exceptions",
                                                          fs_log / "storage_exceptions.txt");
 
-        //__debugbreak();
         
         publiqpp::node node(genesis_signed_block(),
+                            beltpp::ip_address(),
                             rpc_bind_to_address,
                             p2p_bind_to_address,
                             p2p_connect_to_addresses,
@@ -355,7 +354,7 @@ bool process_command_line(int argc, char** argv,
         if (p2p_connect_to_addresses.empty())
         {
             beltpp::ip_address address_item;
-            address_item.from_string("noah.network:11177");
+            address_item.from_string("88.99.146.31:48811");
             p2p_connect_to_addresses.push_back(address_item);
         }
 
