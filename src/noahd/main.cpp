@@ -226,11 +226,13 @@ int main(int argc, char** argv)
                             fs_action_log,
                             fs_transaction_pool,
                             fs_state,
+                            boost::filesystem::path(),
                             plogger_p2p.get(),
                             plogger_rpc.get(),
                             pv_key,
                             n_type,
-                            log_enabled);
+                            log_enabled,
+                            true);
 
         g_pnode = &node;
 
@@ -315,6 +317,7 @@ bool process_command_line(int argc, char** argv,
     {
         auto desc_init = options_description.add_options()
             ("help,h", "Print this help message and exit.")
+            ("action_log,g", "Keep track of blockchain actions.")
             ("p2p_local_interface,i", program_options::value<string>(&p2p_local_interface)->required(),
                             "(p2p) The local network interface and port to bind to")
             ("p2p_remote_host,p", program_options::value<vector<string>>(&hosts),
@@ -360,8 +363,11 @@ bool process_command_line(int argc, char** argv,
 
         if (false == str_pv_key.empty())
             pv_key = meshpp::private_key(str_pv_key);
-        else
+
+        if (options.count("action_log"))
             log_enabled = true;
+        else
+            log_enabled = false;
     }
     catch (std::exception const& ex)
     {
