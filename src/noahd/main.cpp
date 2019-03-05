@@ -220,6 +220,7 @@ int main(int argc, char** argv)
         publiqpp::node node(genesis_signed_block(),
                             beltpp::ip_address(),
                             rpc_bind_to_address,
+                            beltpp::ip_address(),
                             p2p_bind_to_address,
                             p2p_connect_to_addresses,
                             fs_blockchain,
