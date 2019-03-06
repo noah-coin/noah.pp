@@ -27,7 +27,7 @@ for noah.pp build to be able to find the external dependencies.
 ```console
 user@pc:~$ mkdir projects
 user@pc:~$ cd projects
-user@pc:~/projects$ git clone https://github.com/publiqnet/noah.pp
+user@pc:~/projects$ git clone https://github.com/noah-coin/noah.pp
 user@pc:~/projects$ cd noah.pp
 user@pc:~/projects/noah.pp$ git submodule update --init --recursive
 user@pc:~/projects/noah.pp$ cd ..
@@ -44,4 +44,4 @@ there is a command line arguments help, use it wisely!
 also pay attention to all the console logging.
 
 ### more details?
-refer to the wiki page.
+refer to the [wiki](https://github.com/noah-coin/noah.pp/wiki "wiki") page.
