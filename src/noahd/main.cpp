@@ -9,6 +9,8 @@
 #include <mesh.pp/settings.hpp>
 
 #include <publiq.pp/node.hpp>
+#include <publiq.pp/coin.hpp>
+#include <publiq.pp/message.tmpl.hpp>
 
 #include <boost/program_options.hpp>
 #include <boost/locale.hpp>
@@ -39,11 +41,15 @@ bool process_command_line(int argc, char** argv,
                           beltpp::ip_address& p2p_bind_to_address,
                           vector<beltpp::ip_address>& p2p_connect_to_addresses,
                           beltpp::ip_address& rpc_bind_to_address,
+                          beltpp::ip_address& public_address,
                           string& data_directory,
                           meshpp::private_key& pv_key,
-                          bool& log_enabled);
+                          bool& log_enabled,
+                          bool& testnet);
 
-string genesis_signed_block();
+string genesis_signed_block(bool testnet);
+publiqpp::coin mine_amount_threshhold();
+vector<publiqpp::coin> block_reward_array();
 
 static bool g_termination_handled = false;
 static publiqpp::node* g_pnode = nullptr;
@@ -51,7 +57,7 @@ void termination_handler(int /*signum*/)
 {
     g_termination_handled = true;
     if (g_pnode)
-        g_pnode->terminate();
+        g_pnode->wake();
 }
 
 class port2pid_helper
@@ -138,17 +144,17 @@ int main(int argc, char** argv)
     catch (...)
     {}  //  don't care for exception, for now
     //
-    meshpp::config::set_public_key_prefix("NOAH");
-    //
     meshpp::settings::set_application_name("noahd");
     meshpp::settings::set_data_directory(meshpp::config_directory_path().string());
 
     beltpp::ip_address p2p_bind_to_address;
     beltpp::ip_address rpc_bind_to_address;
+    beltpp::ip_address public_address;
     vector<beltpp::ip_address> p2p_connect_to_addresses;
     string data_directory;
     NodeType n_type = NodeType::blockchain;
-    bool log_enabled = false;
+    bool log_enabled;
+    bool testnet;
     meshpp::random_seed seed;
     meshpp::private_key pv_key = seed.get_private_key(0);
 
@@ -156,10 +162,17 @@ int main(int argc, char** argv)
                                       p2p_bind_to_address,
                                       p2p_connect_to_addresses,
                                       rpc_bind_to_address,
+                                      public_address,
                                       data_directory,
                                       pv_key,
-                                      log_enabled))
+                                      log_enabled,
+                                      testnet))
         return 1;
+
+    if (testnet)
+        meshpp::config::set_public_key_prefix("TNOAH");
+    else
+        meshpp::config::set_public_key_prefix("NOAH");
 
     if (false == data_directory.empty())
         meshpp::settings::set_data_directory(data_directory);
@@ -174,7 +187,6 @@ int main(int argc, char** argv)
 #endif
 
     beltpp::ilog_ptr plogger_exceptions = beltpp::t_unique_nullptr<beltpp::ilog>();
-    beltpp::ilog_ptr plogger_storage_exceptions = beltpp::t_unique_nullptr<beltpp::ilog>();
 
     try
     {
@@ -213,14 +225,11 @@ int main(int argc, char** argv)
         //plogger_rpc->disable();
         plogger_exceptions = meshpp::file_logger("noahd_exceptions",
                                                  fs_log / "exceptions.txt");
-        plogger_storage_exceptions = meshpp::file_logger("storage_exceptions",
-                                                         fs_log / "storage_exceptions.txt");
 
         
-        publiqpp::node node(genesis_signed_block(),
-                            beltpp::ip_address(),
+        publiqpp::node node(genesis_signed_block(testnet),
+                            public_address,
                             rpc_bind_to_address,
-                            beltpp::ip_address(),
                             p2p_bind_to_address,
                             p2p_connect_to_addresses,
                             fs_blockchain,
@@ -228,12 +237,17 @@ int main(int argc, char** argv)
                             fs_transaction_pool,
                             fs_state,
                             boost::filesystem::path(),
+                            boost::filesystem::path(),
                             plogger_p2p.get(),
                             plogger_rpc.get(),
                             pv_key,
                             n_type,
                             log_enabled,
-                            true);
+                            true,
+                            testnet,
+                            mine_amount_threshhold(),
+                            block_reward_array(),
+                            std::chrono::seconds(0));
 
         g_pnode = &node;
 
@@ -284,6 +298,15 @@ void loop(NODE& node, beltpp::ilog_ptr& plogger_exceptions, bool& termination_ha
             termination_handler(0);
             break;
         }
+        catch (std::logic_error const& ex)
+        {
+            if (plogger_exceptions)
+                plogger_exceptions->message(ex.what());
+            cout << "logic error cought: " << ex.what() << endl;
+            cout << "will exit now" << endl;
+            termination_handler(0);
+            break;
+        }
         catch (std::exception const& ex)
         {
             if (plogger_exceptions)
@@ -305,12 +328,15 @@ bool process_command_line(int argc, char** argv,
                           beltpp::ip_address& p2p_bind_to_address,
                           vector<beltpp::ip_address>& p2p_connect_to_addresses,
                           beltpp::ip_address& rpc_bind_to_address,
+                          beltpp::ip_address& public_address,
                           string& data_directory,
                           meshpp::private_key& pv_key,
-                          bool& log_enabled)
+                          bool& log_enabled,
+                          bool& testnet)
 {
     string p2p_local_interface;
     string rpc_local_interface;
+    string str_public_address;
     string str_pv_key;
     vector<string> hosts;
     program_options::options_description options_description;
@@ -325,10 +351,13 @@ bool process_command_line(int argc, char** argv,
                             "Remote nodes addresss with port")
             ("rpc_local_interface,r", program_options::value<string>(&rpc_local_interface),
                             "(rpc) The local network interface and port to bind to")
+            ("public_address,a", program_options::value<string>(&str_public_address),
+                            "(rpc) The public IP address that will be broadcasted")
             ("data_directory,d", program_options::value<string>(&data_directory),
                             "Data directory path")
             ("node_private_key,k", program_options::value<string>(&str_pv_key),
-                            "Node private key to start with");
+                            "Node private key to start with")
+            ("testnet", "Work in testnet blockchain");
         (void)(desc_init);
 
         program_options::variables_map options;
@@ -343,10 +372,13 @@ bool process_command_line(int argc, char** argv,
         {
             throw std::runtime_error("");
         }
+        testnet = options.count("testnet");
 
         p2p_bind_to_address.from_string(p2p_local_interface);
         if (false == rpc_local_interface.empty())
             rpc_bind_to_address.from_string(rpc_local_interface);
+        if (false == str_public_address.empty())
+            public_address.from_string(str_public_address);
 
         for (auto const& item : hosts)
         {
@@ -357,18 +389,29 @@ bool process_command_line(int argc, char** argv,
 
         if (p2p_connect_to_addresses.empty())
         {
-            beltpp::ip_address address_item;
-            address_item.from_string("88.99.146.31:48811");
-            p2p_connect_to_addresses.push_back(address_item);
+            if (testnet)
+            {
+                beltpp::ip_address address_item;
+                address_item.from_string("88.99.146.31:48811");
+                p2p_connect_to_addresses.push_back(address_item);
+            }
+            else
+            {
+                beltpp::ip_address address_item;
+                address_item.from_string("88.99.146.31:44300");
+                p2p_connect_to_addresses.push_back(address_item);
+                address_item.from_string("88.99.146.31:44310");
+                p2p_connect_to_addresses.push_back(address_item);
+            }
         }
 
         if (false == str_pv_key.empty())
             pv_key = meshpp::private_key(str_pv_key);
 
-        if (options.count("action_log"))
-            log_enabled = true;
-        else
-            log_enabled = false;
+        log_enabled = options.count("action_log");
+        if (false == str_public_address.empty() &&
+            rpc_local_interface.empty())
+            throw std::runtime_error("rpc_local_interface is not specified");
     }
     catch (std::exception const& ex)
     {
@@ -391,7 +434,149 @@ bool process_command_line(int argc, char** argv,
 }
 
 
-string genesis_signed_block()
+string genesis_signed_block(bool testnet)
 {
-    return R"genesis({"rtt":6,"block_details":{"rtt":5,"header":{"rtt":4,"block_number":0,"delta":0,"c_sum":0,"c_const":1,"prev_hash":"GN41ATrkGn58hDMiW6eMkert3E23JnUvJ2mXcxWWiPyL","time_signed":"2019-02-08 09:10:37"},"rewards":[{"rtt":10,"to":"NOAH7Ta31VaxCB9VfDRvYYosKYpzxXNgVH46UkM9i4FhzNg4JEU3YJ","amount":{"rtt":0,"whole":100,"fraction":0},"reward_type":"initial"},{"rtt":10,"to":"NOAH76Zv5QceNSLibecnMGEKbKo3dVFV6HRuDSuX59mJewJxHPhLwu","amount":{"rtt":0,"whole":100,"fraction":0},"reward_type":"initial"},{"rtt":10,"to":"NOAH7JEFjtQNjyzwnThepF2jJtCe7cCpUFEaxGdUnN2W9wPP5Nh92G","amount":{"rtt":0,"whole":100,"fraction":0},"reward_type":"initial"},{"rtt":10,"to":"NOAH8f5Z8SKVrYFES1KLHtCYMx276a5NTgZX6baahzTqkzfnB4Pidk","amount":{"rtt":0,"whole":100,"fraction":0},"reward_type":"initial"},{"rtt":10,"to":"NOAH8MiwBdYzSj38etLYLES4FSuKJnLPkXAJv4MyrLW7YJNiPbh4z6","amount":{"rtt":0,"whole":100,"fraction":0},"reward_type":"initial"}],"signed_transactions":[]},"authority":"NOAH5HnbMEwb8AYsqZrrEwPaKZ1kzADmwuUMhhtdhL5ZdCCW5pkWmq","signature":"iKx1CJP9zUCfVn3kRkxmBcVkNPVNWJthK8ZnPRebB6y2RE1SNsbHXrzGtu9kbtTgsyQwxNx2SohgkH4UGFwNB7TbS3bf5ZwikT"})genesis";
+#if 0
+    Block genesis_block_mainnet;
+    genesis_block_mainnet.header.block_number = 0;
+    genesis_block_mainnet.header.delta = 0;
+    genesis_block_mainnet.header.c_sum = 0;
+    genesis_block_mainnet.header.c_const = 1;
+    genesis_block_mainnet.header.prev_hash = meshpp::hash("NOAH blockchain. https://noahcoin.org/blog/how-far-can-your-cryptocurrency-go/");
+    beltpp::gm_string_to_gm_time_t("2019-06-01 00:00:00", genesis_block_mainnet.header.time_signed.tm);
+
+    string prefix = meshpp::config::public_key_prefix();
+    Reward reward_publiq1;
+    reward_publiq1.amount.whole = 212500000000;
+    reward_publiq1.reward_type = RewardType::initial;
+    reward_publiq1.to = prefix + "8ZzHz4NFvZzaHD2Sfv4DuRAJaNeG3Sg9q2WuSESvGSQrr9Ftcb";
+
+    genesis_block_mainnet.rewards =
+    {
+        reward_publiq1
+    };
+
+    Block genesis_block_testnet = genesis_block_mainnet;
+    genesis_block_testnet.rewards =
+    {
+        reward_publiq1
+    };
+
+    meshpp::random_seed seed;
+    meshpp::private_key pvk = seed.get_private_key(0);
+    meshpp::public_key pbk = pvk.get_public_key();
+
+    SignedBlock sb;
+    if (testnet)
+        sb.block_details = std::move(genesis_block_testnet);
+    else
+        sb.block_details = std::move(genesis_block_mainnet);
+
+    Authority authorization;
+    authorization.address = pbk.to_string();
+    authorization.signature = pvk.sign(sb.block_details.to_string()).base58;
+
+    sb.authorization = authorization;
+
+    std::cout << sb.to_string() << std::endl;
+#endif
+    std::string str_genesis_mainnet = R"genesis(
+                                      {
+                                         "rtt":8,
+                                         "block_details":{
+                                            "rtt":7,
+                                            "header":{
+                                               "rtt":5,
+                                               "block_number":0,
+                                               "delta":0,
+                                               "c_sum":0,
+                                               "c_const":1,
+                                               "prev_hash":"Fic61hPnMkuBGRnVwg6Jo7S3TRZPQrUo2LP2vuLTPpwR",
+                                               "time_signed":"2019-06-01 00:00:00"
+                                            },
+                                            "rewards":[
+                                               {
+                                                  "rtt":12,
+                                                  "to":"NOAH8ZzHz4NFvZzaHD2Sfv4DuRAJaNeG3Sg9q2WuSESvGSQrr9Ftcb",
+                                                  "amount":{
+                                                     "rtt":0,
+                                                     "whole":212500000000,
+                                                     "fraction":0
+                                                  },
+                                                  "reward_type":"initial"
+                                               }
+                                            ],
+                                            "signed_transactions":[
+
+                                            ]
+                                         },
+                                         "authorization":{
+                                            "rtt":3,
+                                            "address":"NOAH8UNYkeKE4as51snM9EptwNBbCX2FeAjMiJyaDZ2hXzph4kd2AL",
+                                            "signature":"AN1rKp3S6vnu5S6rtQWQFhqnyi4C7hdvCaLBnYdT4wx79ZBFFVYzUhLWNMNFgW8kHU1WuXCRnqJyMzDBYi8YPxBTzdyqrfLMf"
+                                         }
+                                      }
+                                      )genesis";
+
+    std::string str_genesis_testnet = R"genesis(
+                                      {
+                                         "rtt":8,
+                                         "block_details":{
+                                            "rtt":7,
+                                            "header":{
+                                               "rtt":5,
+                                               "block_number":0,
+                                               "delta":0,
+                                               "c_sum":0,
+                                               "c_const":1,
+                                               "prev_hash":"Fic61hPnMkuBGRnVwg6Jo7S3TRZPQrUo2LP2vuLTPpwR",
+                                               "time_signed":"2019-06-01 00:00:00"
+                                            },
+                                            "rewards":[
+                                               {
+                                                  "rtt":12,
+                                                  "to":"TNOAH8ZzHz4NFvZzaHD2Sfv4DuRAJaNeG3Sg9q2WuSESvGSQrr9Ftcb",
+                                                  "amount":{
+                                                     "rtt":0,
+                                                     "whole":212500000000,
+                                                     "fraction":0
+                                                  },
+                                                  "reward_type":"initial"
+                                               }
+                                            ],
+                                            "signed_transactions":[
+
+                                            ]
+                                         },
+                                         "authorization":{
+                                            "rtt":3,
+                                            "address":"TNOAH8D2N3bVtvd9Wnns2UNcFG3BJuvYCBJFgBoTMVepebrAEMUL9yv",
+                                            "signature":"AN1rKqXkD7LnKiV7ioeQKw6wbespSQsLmxxDQFSJpn1sLE4NMAd1Epbkdf1xj7TuQ6vPJL5KpjDzzxLPgNXury1rZZDFhtndf"
+                                         }
+                                      }
+                                      )genesis";
+
+    if (testnet)
+        return str_genesis_testnet;
+    else
+        return str_genesis_mainnet;
+}
+
+publiqpp::coin mine_amount_threshhold()
+{
+    return publiqpp::coin(1000000, 0);
+}
+
+vector<publiqpp::coin> block_reward_array()
+{
+    using coin = publiqpp::coin;
+    return vector<publiqpp::coin>
+    {
+        coin(75000,0), coin(75000,0), coin(75000,0), coin(75000,0), coin(75000,0),
+        coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0),
+        coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0),
+        coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0),
+        coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0),
+        coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0), coin(15000,0)
+    };
 }
